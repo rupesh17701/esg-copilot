@@ -2,6 +2,12 @@
 
 AI agent for BRSR analysis, ESG risk, and carbon intelligence.
 
+**Live demo:** https://frontend-production-47ba.up.railway.app
+**Source:** https://github.com/rupesh17701/esg-copilot
+
+The demo is deployed open (no login) so it's frictionless to click through —
+see [Deployment](#deployment) for the tradeoffs and how to lock it down.
+
 ESG Copilot ingests a company's BRSR (Business Responsibility and
 Sustainability Report — SEBI's mandated disclosure format for India's top
 listed companies), extracts structured data across all nine NGRBC principles,
@@ -120,6 +126,38 @@ pytest -q
 guessed"), scoring bounds and edge cases, carbon benchmarking, the offline
 LLM fallback, RAG retrieval, and the full API flow (upload → score → chat →
 delete) against an in-memory database.
+
+## Deployment
+
+The live demo runs on [Railway](https://railway.app) as two services from
+this repo's Dockerfiles:
+
+- **`backend`** — FastAPI, private networking only (no public URL). One
+  persistent volume mounted at `/app/db`; `STORAGE_DIR=/app/db` tells the app
+  to keep both the SQLite file and uploaded reports under that single mount
+  (see `app/config.py` — hosts that allow more than one volume per service
+  can instead set two docker-compose-style mounts and leave `STORAGE_DIR`
+  unset).
+- **`frontend`** — nginx serving the built React app and reverse-proxying
+  `/api/*` to the backend over Railway's private network
+  (`BACKEND_HOST=backend.railway.internal`). This is the only service with a
+  public domain.
+
+**Auth:** nginx supports HTTP Basic Auth for the whole app (frontend +
+proxied API) via `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` env vars — see
+`frontend/docker-entrypoint.sh`. Unset (as on the live demo above) means the
+app is fully open, which is the intentional tradeoff for a portfolio/demo
+deployment where the goal is a zero-friction link. Set both vars on the
+`frontend` service to require a login before making a long-lived deployment
+public.
+
+To redeploy after a change, from the repo root with the Railway CLI linked
+to this project:
+
+```bash
+railway up ./backend --path-as-root --service backend
+railway up ./frontend --path-as-root --service frontend
+```
 
 ## Design notes / limitations
 
