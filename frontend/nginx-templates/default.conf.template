@@ -1,3 +1,13 @@
+# A bare `proxy_pass http://hostname:port` resolves the hostname ONCE, when
+# nginx starts, and caches that IP for the life of the process. On platforms
+# where a service's backing container gets a new private IP on every
+# redeploy (Railway included), that means: redeploy the backend alone, and
+# nginx keeps sending traffic to the old, now-dead IP until nginx itself is
+# restarted — which looks like the app being intermittently, mysteriously
+# down. Routing proxy_pass through a variable forces nginx to re-resolve via
+# this `resolver` on every request instead of caching indefinitely.
+resolver ${RESOLVER_IP} valid=5s;
+
 server {
     listen 80;
     server_name _;
@@ -13,7 +23,12 @@ server {
     include /etc/nginx/auth.conf;
 
     location /api/ {
-        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT}/api/;
+        # With a variable in proxy_pass, nginx stops doing its usual
+        # location-prefix substitution and instead forwards the incoming URI
+        # unchanged — so no /api/ suffix belongs here (that would double it
+        # up into /api/api/... and 404 against the backend's real routes).
+        set $backend_upstream "http://${BACKEND_HOST}:${BACKEND_PORT}";
+        proxy_pass $backend_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

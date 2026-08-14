@@ -8,7 +8,19 @@ set -e
 export BACKEND_HOST="${BACKEND_HOST:-backend}"
 export BACKEND_PORT="${BACKEND_PORT:-8000}"
 
-envsubst '${BACKEND_HOST} ${BACKEND_PORT}' \
+# nginx needs an explicit resolver IP to re-resolve BACKEND_HOST per request
+# (see the comment in the template for why that matters). "resolver
+# local=on" isn't supported by every nginx build, so read the container's
+# actual DNS server straight out of /etc/resolv.conf instead — this works
+# the same whether that's Docker's embedded DNS (127.0.0.11) or Railway's
+# internal resolver, with nothing platform-specific hardcoded.
+export RESOLVER_IP="$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf)"
+if [ -z "$RESOLVER_IP" ]; then
+  echo "WARNING: no nameserver found in /etc/resolv.conf; falling back to 127.0.0.11"
+  export RESOLVER_IP="127.0.0.11"
+fi
+
+envsubst '${BACKEND_HOST} ${BACKEND_PORT} ${RESOLVER_IP}' \
   < /etc/nginx/templates/default.conf.template \
   > /etc/nginx/conf.d/default.conf
 
