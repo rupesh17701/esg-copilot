@@ -87,14 +87,20 @@ def extract_principles(text: str) -> list[PrincipleDisclosure]:
 
     # Split the document into per-principle sections using "Principle N" headers.
     splits = re.split(r"(?im)^\s*Principle\s+(\d)\b.*$", text)
-    # splits alternates [pre-text, "1", section1, "2", section2, ...]
-    section_by_principle: dict[int, str] = {}
+    # splits alternates [pre-text, "1", section1, "2", section2, ...].
+    # Accumulate as lists and join once — repeated string concatenation in a
+    # loop is O(n^2) and can hang on a document with many "Principle N"
+    # header matches.
+    section_parts_by_principle: dict[int, list[str]] = {}
     for i in range(1, len(splits), 2):
         try:
             num = int(splits[i])
         except ValueError:
             continue
-        section_by_principle[num] = section_by_principle.get(num, "") + splits[i + 1]
+        section_parts_by_principle.setdefault(num, []).append(splits[i + 1])
+    section_by_principle: dict[int, str] = {
+        num: "".join(parts) for num, parts in section_parts_by_principle.items()
+    }
 
     for num, title in NGRBC_PRINCIPLES.items():
         section = section_by_principle.get(num, "")

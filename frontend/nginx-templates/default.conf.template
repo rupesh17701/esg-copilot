@@ -4,6 +4,12 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # nginx defaults to a 1MB request body cap, which silently rejects any
+    # real-world BRSR PDF (commonly tens of MB) before it ever reaches the
+    # backend — the browser sees this as a bare "Failed to fetch", not a
+    # readable error. Raise it, and give large-PDF parsing room to finish.
+    client_max_body_size 50M;
+
     include /etc/nginx/auth.conf;
 
     location /api/ {
@@ -12,6 +18,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
     }
 
     location / {
