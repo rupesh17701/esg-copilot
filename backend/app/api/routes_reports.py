@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.database import Report, get_db
 from app.models.schemas import ReportDetail, ReportSummary
 from app.services.agent import generate_summary
-from app.services.pipeline import parsed_models, process_and_store_report
+from app.services.pipeline import NotABRSRReportError, parsed_models, process_and_store_report
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -20,7 +20,10 @@ async def upload_report(file: UploadFile, db: Session = Depends(get_db)) -> Repo
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    report = process_and_store_report(db, file.filename, file_bytes)
+    try:
+        report = process_and_store_report(db, file.filename, file_bytes)
+    except NotABRSRReportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _to_detail(report)
 
 

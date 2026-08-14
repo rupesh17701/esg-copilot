@@ -82,10 +82,8 @@ def extract_company_meta(text: str) -> tuple[str, str, str | None]:
     return (company or "Unknown Company"), (sector or "Unspecified"), year
 
 
-def extract_principles(text: str) -> list[PrincipleDisclosure]:
-    disclosures: list[PrincipleDisclosure] = []
-
-    # Split the document into per-principle sections using "Principle N" headers.
+def split_principle_sections(text: str) -> dict[int, str]:
+    """Splits the document into per-principle sections using "Principle N" headers."""
     splits = re.split(r"(?im)^\s*Principle\s+(\d)\b.*$", text)
     # splits alternates [pre-text, "1", section1, "2", section2, ...].
     # Accumulate as lists and join once — repeated string concatenation in a
@@ -98,9 +96,59 @@ def extract_principles(text: str) -> list[PrincipleDisclosure]:
         except ValueError:
             continue
         section_parts_by_principle.setdefault(num, []).append(splits[i + 1])
-    section_by_principle: dict[int, str] = {
-        num: "".join(parts) for num, parts in section_parts_by_principle.items()
-    }
+    return {num: "".join(parts) for num, parts in section_parts_by_principle.items()}
+
+
+# A section must have at least this much text to count as "found" for
+# validity purposes — guards against a stray line that happens to start with
+# "Principle 3" (e.g. a table of contents entry) in an unrelated document.
+MIN_SECTION_CHARS_FOR_VALIDITY = 80
+
+# Phrases that essentially only appear in an actual BRSR filing's cover page
+# or Section A. Any one of these is treated as strong, on its own sufficient,
+# evidence the document is a BRSR report.
+BRSR_TITLE_MARKERS = (
+    "business responsibility and sustainability report",
+    "national guidelines on responsible business conduct",
+    "ngrbc",
+    r"\bbrsr\b",
+)
+
+
+def assess_brsr_validity(text: str) -> tuple[bool, str | None]:
+    """Heuristic check for whether uploaded text is actually a BRSR filing.
+
+    This runs before the full extraction/scoring pipeline so an unrelated
+    document (a resume, an invoice, a different kind of report) is rejected
+    with a clear reason instead of silently producing a low-quality "analysis"
+    that looks like a real result. Deliberately lenient — it's meant to catch
+    documents that are obviously not a BRSR report, not to gatekeep every
+    formatting variant of a real one.
+    """
+    if not text or not text.strip():
+        return False, "The uploaded file contains no extractable text."
+
+    has_title_marker = any(re.search(pattern, text, re.IGNORECASE) for pattern in BRSR_TITLE_MARKERS)
+
+    sections = split_principle_sections(text)
+    principle_sections_found = sum(
+        1 for section in sections.values() if len(section.strip()) >= MIN_SECTION_CHARS_FOR_VALIDITY
+    )
+
+    if has_title_marker or principle_sections_found >= 3:
+        return True, None
+
+    return False, (
+        "This doesn't look like a BRSR report — no mention of 'Business Responsibility and "
+        "Sustainability Report' / 'NGRBC' was found, and fewer than 3 of the 9 NGRBC principle "
+        "sections (Principle 1-9) could be identified. Upload a company's actual BRSR filing "
+        "(PDF or text)."
+    )
+
+
+def extract_principles(text: str) -> list[PrincipleDisclosure]:
+    disclosures: list[PrincipleDisclosure] = []
+    section_by_principle = split_principle_sections(text)
 
     for num, title in NGRBC_PRINCIPLES.items():
         section = section_by_principle.get(num, "")

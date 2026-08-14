@@ -8,9 +8,17 @@ from app.services import brsr_extractor, carbon_intelligence, esg_scoring, pdf_p
 from app.config import get_settings
 
 
+class NotABRSRReportError(ValueError):
+    """Raised when the uploaded document doesn't look like a BRSR filing."""
+
+
 def process_and_store_report(db: Session, filename: str, file_bytes: bytes) -> Report:
     raw_text = pdf_parser.extract_text(file_bytes, filename)
     normalized = pdf_parser.normalize_whitespace(raw_text)
+
+    is_valid, reason = brsr_extractor.assess_brsr_validity(normalized)
+    if not is_valid:
+        raise NotABRSRReportError(reason)
 
     structured = brsr_extractor.extract_structured_data(normalized)
     esg_result = esg_scoring.compute_esg_score(structured)

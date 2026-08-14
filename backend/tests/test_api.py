@@ -49,6 +49,28 @@ def test_upload_and_retrieve_report(client, sample_text):
     assert detail_resp.json()["id"] == report_id
 
 
+def test_upload_rejects_non_brsr_document(client):
+    resume_text = """
+    JOHN DOE — Software Engineer
+
+    EXPERIENCE
+    Senior Developer at TechCorp, 2020-2024.
+
+    EDUCATION
+    BS Computer Science, State University, 2020.
+    """
+    resp = client.post(
+        "/api/reports",
+        files={"file": ("resume.txt", resume_text.encode("utf-8"), "text/plain")},
+    )
+    assert resp.status_code == 422
+    assert "doesn't look like a BRSR report" in resp.json()["detail"]
+
+    # Nothing should have been persisted.
+    list_resp = client.get("/api/reports")
+    assert list_resp.json() == []
+
+
 def test_get_missing_report_404s(client):
     resp = client.get("/api/reports/999999")
     assert resp.status_code == 404
