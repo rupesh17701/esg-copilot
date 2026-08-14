@@ -19,6 +19,15 @@ if [ -z "$RESOLVER_IP" ]; then
   echo "WARNING: no nameserver found in /etc/resolv.conf; falling back to 127.0.0.11"
   export RESOLVER_IP="127.0.0.11"
 fi
+# nginx's resolver directive requires IPv6 addresses in brackets (it uses a
+# bare trailing ":port" to mean a port override, which is ambiguous with the
+# colons inside an unbracketed IPv6 address). Railway's internal resolver is
+# IPv6 (e.g. fd12::10), so without this nginx fails to even start.
+case "$RESOLVER_IP" in
+  *:*) RESOLVER_IP="[$RESOLVER_IP]" ;;
+esac
+export RESOLVER_IP
+echo "Using DNS resolver: $RESOLVER_IP"
 
 envsubst '${BACKEND_HOST} ${BACKEND_PORT} ${RESOLVER_IP}' \
   < /etc/nginx/templates/default.conf.template \
