@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -5,12 +6,23 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "app" / "data"
-UPLOAD_DIR = BASE_DIR / "uploads"
-DB_DIR = BASE_DIR / "db"
+
+# STORAGE_DIR lets a deployment with a single mountable volume (e.g. Railway,
+# which allows only one persistent volume per service) point both the SQLite
+# DB and uploaded files at subdirectories of that one mount. Local/dev and
+# docker-compose (two separate volumes) don't set it, so they keep the
+# original separate backend/db and backend/uploads directories.
+_storage_dir = os.environ.get("STORAGE_DIR")
+if _storage_dir:
+    UPLOAD_DIR = Path(_storage_dir) / "uploads"
+    DB_DIR = Path(_storage_dir) / "db"
+else:
+    UPLOAD_DIR = BASE_DIR / "uploads"
+    DB_DIR = BASE_DIR / "db"
 DB_PATH = DB_DIR / "esg_copilot.db"
 
-UPLOAD_DIR.mkdir(exist_ok=True)
-DB_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+DB_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class Settings(BaseSettings):
